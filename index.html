@@ -151,18 +151,62 @@ var TABS=[{id:"Schedule",ic:"📅",l:"Sched"},{id:"Habits",ic:"🔥",l:"Habits"}
 var MTGT={2:3000,3:7000,4:12000};
 var INC=41500;
 var FEXP=[{id:"vc1",l:"VC 10.5K",d:10500},{id:"vc2",l:"VC 2K",d:2000},{id:"vc3",l:"VC 1K",d:1000},{id:"lic",l:"LIC",d:0},{id:"sip",l:"SIP",d:0},{id:"gkh",l:"Ghar Kharcha",d:0},{id:"bls",l:"Bills",d:0}];
-var NSCHD=[{time:"06:15",title:"🌅 Rise & Shine!",body:"Wake up! Water pi. Gym ke liye ready ho!"},{time:"06:30",title:"💪 Gym Time!",body:"6:30 ho gaya bhai — gym chalte hain!"},{time:"08:45",title:"🏢 Job ke liye niklo!",body:"Office time. Niklo abhi."},{time:"11:00",title:"🥜 Snack time!",body:"Fruit + Peanuts. Energy maintain karo."},{time:"13:00",title:"🍛 Lunch!",body:"Lunch karo. Ek ghante ka break."},{time:"21:30",title:"💻 DSA Time!",body:"9:30 PM — DSA practice. 45 min focus."},{time:"22:25",title:"🛠️ Dev Time!",body:"Project pe kaam karo. 40 min."},{time:"23:05",title:"✅ Recap + GitHub!",body:"Push karo. Aaj ka review. 10 min."},{time:"23:15",title:"📵 Phone band karo!",body:"11:15 ho gaya — phone rakh do bhai."},{time:"23:30",title:"😴 So jao!",body:"Rest zaroori hai. 90-day mission ke liye."}];
+var NSCHD=[{time:"06:15",title:"🌅 Rise & Shine!",body:"Wake up! Water pi. Gym ke liye ready ho!",sound:"wake"},{time:"06:30",title:"💪 Gym Time!",body:"6:30 ho gaya bhai — gym chalte hain!",sound:"habit"},{time:"08:45",title:"🏢 Job ke liye niklo!",body:"Office time. Niklo abhi."},{time:"11:00",title:"🥜 Snack time!",body:"Fruit + Peanuts. Energy maintain karo."},{time:"13:00",title:"🍛 Lunch!",body:"Lunch karo. Ek ghante ka break."},{time:"21:30",title:"💻 DSA Time!",body:"9:30 PM — DSA practice. 45 min focus.",sound:"alert"},{time:"22:25",title:"🛠️ Dev Time!",body:"Project pe kaam karo. 40 min."},{time:"23:05",title:"✅ Recap + GitHub!",body:"Push karo. Aaj ka review. 10 min."},{time:"23:15",title:"📵 Phone band karo!",body:"11:15 ho gaya — phone rakh do bhai."},{time:"23:30",title:"😴 So jao!",body:"Rest zaroori hai. 90-day mission ke liye.",sound:"wake"}];
 
 // ── STATE
 var aTab="Schedule",fSub="Overview",cSub="Overview",mSub="Daily";
 var brActive=false,brPhase="inhale",brCount=4,brCyc=0,brTimer=null;
 
+// ── SOUND ENGINE
+var AudioCtx = window.AudioContext || window.webkitAudioContext;
+var actx = null;
+function getACtx(){if(!actx)actx=new AudioCtx();return actx;}
+function playSound(type){
+  try{
+    var ctx=getACtx();
+    var o=ctx.createOscillator();
+    var g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    if(type==='done'){
+      o.frequency.setValueAtTime(523,ctx.currentTime);
+      o.frequency.setValueAtTime(659,ctx.currentTime+0.1);
+      o.frequency.setValueAtTime(784,ctx.currentTime+0.2);
+      g.gain.setValueAtTime(0.3,ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.5);
+      o.start(ctx.currentTime);o.stop(ctx.currentTime+0.5);
+    } else if(type==='habit'){
+      o.frequency.setValueAtTime(440,ctx.currentTime);
+      o.frequency.setValueAtTime(880,ctx.currentTime+0.15);
+      g.gain.setValueAtTime(0.3,ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+      o.start(ctx.currentTime);o.stop(ctx.currentTime+0.4);
+    } else if(type==='alert'){
+      o.type='square';
+      o.frequency.setValueAtTime(800,ctx.currentTime);
+      g.gain.setValueAtTime(0.2,ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);
+      o.start(ctx.currentTime);o.stop(ctx.currentTime+0.3);
+    } else if(type==='wake'){
+      [523,659,784,1047].forEach(function(f,i){
+        var o2=ctx.createOscillator();var g2=ctx.createGain();
+        o2.connect(g2);g2.connect(ctx.destination);
+        o2.frequency.value=f;
+        g2.gain.setValueAtTime(0.25,ctx.currentTime+i*0.12);
+        g2.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+i*0.12+0.3);
+        o2.start(ctx.currentTime+i*0.12);o2.stop(ctx.currentTime+i*0.12+0.3);
+      });
+    }
+  }catch(e){console.log('sound err',e);}
+}
+
 // ── NOTIFICATIONS
+var soundEnabled=true;
 function reqNotif(){
   if(!("Notification" in window)){toast("Browser support nahi","var(--red)");return;}
   Notification.requestPermission().then(function(p){
     if(p==="granted"){
       toast("🔔 Notifications ON!");
+      playSound('wake');
       schedNotifs();
       document.getElementById("nbtn").textContent="🔔";
     } else {
@@ -170,6 +214,12 @@ function reqNotif(){
     }
     updNP();
   });
+}
+function sendNotif(title, body, sound){
+  if("Notification" in window && Notification.permission==="granted"){
+    new Notification(title,{body:body,icon:"/icon.png",badge:"/icon.png"});
+  }
+  if(soundEnabled && sound) playSound(sound);
 }
 function schedNotifs(){
   if(!("Notification" in window)||Notification.permission!=="granted")return;
@@ -181,10 +231,9 @@ function schedNotifs(){
     if(t<=now)t.setDate(t.getDate()+1);
     var delay=t-now;
     if(delay>0&&delay<86400000){
-      setTimeout(function(ti,bo){
-        if(Notification.permission==="granted")
-          new Notification(ti,{body:bo,icon:"/icon.png"});
-      }.bind(null,n.title,n.body),delay);
+      setTimeout(function(ti,bo,snd){
+        sendNotif(ti,bo,snd);
+      }.bind(null,n.title,n.body,n.sound||'alert'),delay);
     }
   });
 }
@@ -193,23 +242,50 @@ function updNP(){
   var el=document.getElementById("nstatus");
   var el2=document.getElementById("ntimes");
   if(!el||!el2)return;
-  var msgs={granted:"✅ Notifications ON — roz reminders milenge!",denied:"❌ Denied — Settings mein jaake allow karo",default:"⚠️ Permission abhi nahi di",unsupported:"❌ Browser support nahi"};
+  var msgs={granted:"✅ Notifications ON!",denied:"❌ Denied — Settings mein Allow karo",default:"⚠️ Permission nahi di abhi",unsupported:"❌ Browser support nahi"};
   var clrs={granted:"var(--green)",denied:"var(--red)",default:"var(--amber)",unsupported:"var(--red)"};
-  el.style.color=clrs[perm];el.textContent=msgs[perm]||"";
-  el2.innerHTML="<div class='slbl'>Daily Reminders</div>"+NSCHD.map(function(n){
-    return "<div style='display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)'>"+
-      "<div style='font-size:9px;color:var(--blue);min-width:40px'>"+n.time+"</div>"+
-      "<div><div style='font-size:12px;font-weight:600'>"+n.title+"</div><div style='font-size:10px;color:var(--txt3)'>"+n.body+"</div></div>"+
-    "</div>";
-  }).join("");
+  el.style.color=clrs[perm];el.textContent=msgs[perm]||"Unknown";
+  el2.innerHTML="<div class='slbl' style='margin-top:10px'>Sound Test</div>"+
+    "<div style='display:flex;gap:8px;margin-bottom:14px'>"+
+    [{l:'✅ Task',s:'done'},{l:'🔥 Habit',s:'habit'},{l:'⏰ Alert',s:'alert'},{l:'🌅 Wake',s:'wake'}].map(function(b){
+      return "<button onclick="playSound('"+b.s+"')" style='flex:1;padding:8px 4px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--txt);font-size:11px;cursor:pointer'>"+b.l+"</button>";
+    }).join('')+"</div>"+
+    "<div style='display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:12px;margin-bottom:14px'>"+
+    "<div style='flex:1;font-size:13px;font-weight:600'>Sound</div>"+
+    "<div onclick='togSound()' id='soundtog' style='width:44px;height:24px;border-radius:12px;background:"+(soundEnabled?'var(--green)':'var(--bg3)')+";border:1px solid var(--border);cursor:pointer;position:relative;transition:background .2s'>"+
+    "<div style='position:absolute;top:2px;left:"+(soundEnabled?'22':'2')+"px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s'></div></div></div>"+
+    "<div class='slbl'>Daily Reminders</div>"+
+    NSCHD.map(function(n){
+      return "<div style='display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)'>"+
+        "<div style='font-size:9px;color:var(--blue);min-width:42px;margin-top:2px'>"+n.time+"</div>"+
+        "<div style='flex:1'><div style='font-size:12px;font-weight:600'>"+n.title+"</div>"+
+        "<div style='font-size:10px;color:var(--txt3)'>"+n.body+"</div></div></div>";
+    }).join("");
 }
+function togSound(){soundEnabled=!soundEnabled;DB._sound=soundEnabled;save(DB);updNP();}
 function toggleNP(){
   var p=document.getElementById("npanel");
   p.classList.toggle("show");
   if(p.classList.contains("show"))updNP();
 }
 
+// ── DAY COMPLETE CHECK
+function checkDayComplete(){
+  var today=tday(),td=DB[today]||{};
+  var all=[].concat(SCH.morning,SCH.day,SCH.night);
+  var done=all.filter(function(i){return td[i.id];}).length;
+  if(done===all.length){
+    setTimeout(function(){
+      sendNotif("🏆 Aaj ka din Complete!","Sabhi "+all.length+" tasks done! Bhai tu champion hai!","wake");
+      toast("🏆 Din complete! Champion!","var(--purple)");
+    },300);
+  } else if(done>0 && done%5===0){
+    sendNotif("💪 "+done+" tasks done!","Aur "+( all.length-done)+" baaki — keep going!","done");
+  }
+}
+
 // ── RENDER
+
 function render(){
   DB=load();
   var today=tday(),td=DB[today]||{};
@@ -257,7 +333,7 @@ function rSch(){
     }).join("")+"<div style='margin-bottom:6px'></div>";
   }).join("");
 }
-function togItem(id){var k=tday();if(!DB[k])DB[k]={};DB[k][id]=!DB[k][id];save(DB);if(DB[k][id])toast("✓ Done!");render();}
+function togItem(id){var k=tday();if(!DB[k])DB[k]={};DB[k][id]=!DB[k][id];save(DB);if(DB[k][id]){toast("✓ Done!");playSound("done");checkDayComplete();}render();}
 
 // ── HABITS
 function rHab(){
@@ -282,7 +358,7 @@ function rHab(){
       }).join("")+"</div></div>";
   }).join("")+"</div>";
 }
-function togHab(id){var k=tday();if(!DB[k])DB[k]={};DB[k][id]=!DB[k][id];save(DB);if(DB[k][id])toast("🔥 Streak!");render();}
+function togHab(id){var k=tday();if(!DB[k])DB[k]={};DB[k][id]=!DB[k][id];save(DB);if(DB[k][id]){toast("🔥 Streak!");playSound("habit");}render();}
 
 // ── DSA
 function rDSA(){
@@ -699,6 +775,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT
+soundEnabled=DB._sound!==false;
 render();
 if("Notification" in window && Notification.permission==="granted") schedNotifs();
 setInterval(function(){save(DB);},30000);
